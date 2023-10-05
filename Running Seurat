@@ -1,7 +1,5 @@
 # In the Outs folder of Cell ranger, there is filtered_bc_matrix folder. Inside that we can find all the barcodes.tsv.gz. features.tsv.gz and matrix.mtx.gz files
-# script to perform standard workflow steps to analyze single cell RNA-Seq data
-# data: 20k Mixture of NSCLC DTCs from 7 donors, 3' v3.1
-# data source: https://www.10xgenomics.com/resources/datasets/10-k-human-pbm-cs-multiome-v-1-0-chromium-controller-1-standard-2-0-0         
+# script to perform standard workflow steps to analyze single cell RNA-Seq data   
 
 # setwd("~/Desktop/demo/single_cell_RNASeq/scripts")
 
