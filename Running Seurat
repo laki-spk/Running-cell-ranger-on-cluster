@@ -1,96 +1,171 @@
-# In the Outs folder of Cell ranger, there is filtered_bc_matrix folder. Inside that we can find all the barcodes.tsv.gz. features.tsv.gz and matrix.mtx.gz files
-# script to perform standard workflow steps to analyze single cell RNA-Seq data   
-
-# setwd("~/Desktop/demo/single_cell_RNASeq/scripts")
-
-# load libraries
+library(dplyr)
 library(Seurat)
-library(tidyverse)
+library(patchwork)
 
-# Load the NSCLC dataset
-nsclc.sparse.m <- Read10X_h5(filename = '../data/20k_NSCLC_DTC_3p_nextgem_Multiplex_count_raw_feature_bc_matrix.h5')
-str(nsclc.sparse.m)
-cts <-  nsclc.sparse.m$`Gene Expression`
-
-
+# Load the dataset MHM - MH merged with Ctrl and treatment
+MHM.data <- Read10X(data.dir = "filtered_feature_bc_matrix/MHM/")
 
 # Initialize the Seurat object with the raw (non-normalized data).
-nsclc.seurat.obj <- CreateSeuratObject(counts = cts, project = "NSCLC", min.cells = 3, min.features = 200)
-str(nsclc.seurat.obj)
-nsclc.seurat.obj
-# 29552 features across 42081 samples
+# To create the Seurat object samples are now merged and can be identified from BC-1-gene, so select names.field = 2 and names.delim = "-" instead of "_"
+MHM <- CreateSeuratObject(counts = MHM.data, assay = "RNA",
+                          names.field = 2,  names.delim = "-", min.cells = 3, min.features = 200)
+MHM
 
+#To look at the data size;
 
+MHM.data
+dense.size <- object.size(as.matrix(MHM.data))
+dense.size
+sparse.size <- object.size(MHM.data)
+sparse.size
+dense.size/sparse.size
 
-# 1. QC -------
-View(nsclc.seurat.obj@meta.data)
-# % MT reads
-nsclc.seurat.obj[["percent.mt"]] <- PercentageFeatureSet(nsclc.seurat.obj, pattern = "^MT-")
-View(nsclc.seurat.obj@meta.data)
+#QC and selecting cells for further analyis 
+#Use MT for human genome and for mouse genome use mt
 
-VlnPlot(nsclc.seurat.obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
-FeatureScatter(nsclc.seurat.obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") +
-  geom_smooth(method = 'lm')
+MHM[["percent.mt"]] <- PercentageFeatureSet(MHM, pattern = "^mt-")
+head(MHM@meta.data, 5)
 
-# 2. Filtering -----------------
-nsclc.seurat.obj <- subset(nsclc.seurat.obj, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & 
-                          percent.mt < 5)
+# Visualize QC metrics as a violin plot
+VlnPlot(MHM, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0, group.by = "orig.ident")
 
-# 3. Normalize data ----------
-#nsclc.seurat.obj <- NormalizeData(nsclc.seurat.obj, normalization.method = "LogNormalize", scale.factor = 10000)
-# OR
-nsclc.seurat.obj <- NormalizeData(nsclc.seurat.obj)
-str(nsclc.seurat.obj)
+# FeatureScatter is typically used to visualize feature-feature relationships, but can be used
+# for anything calculated by the object, i.e. columns in object metadata, PC scores etc.
 
+plot1 <- FeatureScatter(MHM, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(MHM, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
 
-# 4. Identify highly variable features --------------
-nsclc.seurat.obj <- FindVariableFeatures(nsclc.seurat.obj, selection.method = "vst", nfeatures = 2000)
+#You may adjust upperlimit and downlimit of nFeature_RNA, After every adjustment run Vln plot and see. 
+#From plot 1 you can get an idea about the percent.mt cutoff
+
+MHM <- subset(MHM, subset = nFeature_RNA > 100 & nFeature_RNA < 4000 & percent.mt <10 )
+
+VlnPlot(MHM, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0, group.by = "orig.ident")
+plot1 <- FeatureScatter(MHM, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(MHM, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+
+#Normalize data
+#by default scale factor is set to 10,000
+
+MHM <- NormalizeData(MHM, normalization.method = "LogNormalize", scale.factor = 10000)
+
+#if we aren't changing scale factor we can just use the following command;
+
+MHM <- NormalizeData(MHM)
+
+#identify highly variable features
+#nfeatures = 2000: to return 2000 features per data set to make it easy for downstream analysis
+
+MHM <- FindVariableFeatures(MHM, selection.method = "vst", nfeatures = 2000)
 
 # Identify the 10 most highly variable genes
-top10 <- head(VariableFeatures(nsclc.seurat.obj), 10)
+top10 <- head(VariableFeatures(MHM), 10)
 
 # plot variable features with and without labels
-plot1 <- VariableFeaturePlot(nsclc.seurat.obj)
-LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 <- VariableFeaturePlot(MHM)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE, xnudge = 0 , ynudge = 0)
+plot1 + plot2
+
+#Next, we apply a linear transformation (‘scaling’) that is a standard pre-processing step prior to dimensional reduction techniques like PCA. 
+#The ScaleData() function:
+# Shifts the expression of each gene, so that the mean expression across cells is 0
+# Scales the expression of each gene, so that the variance across cells is 1
+# This step gives equal weight in downstream analyses, so that highly-expressed genes do not dominate
+# The results of this are stored in pbmc[["RNA"]]$scale.data
+# By default, only variable features are scaled.
+# You can specify the features argument to scale additional features
+
+all.genes <- rownames(MHM)
+MHM <- ScaleData(MHM, features = all.genes)
+
+# To remove unwanted sources of variation
+# we could ‘regress out’ heterogeneity associated with (for example) cell cycle stage, or mitochondrial contamination 
+
+MHM <- ScaleData(MHM, vars.to.regress = "percent.mt")
+
+# Perform linear dimensional reduction
+# Next we perform PCA on the scaled data. By default, only the previously determined variable features are used as input, but can be defined using features argument if you wish to choose a different subset (if you do want to use a custom subset of features, make sure you pass these to ScaleData first).
+# For the first principal components, Seurat outputs a list of genes with the most positive and negative loadings, representing modules of genes that exhibit either correlation (or anti-correlation) across single-cells in the dataset.
+
+MHM <- RunPCA(MHM, features = VariableFeatures(object = MHM))
+
+# Examine and visualize PCA results a few different ways
+
+print(MHM[["pca"]], dims = 1:5, nfeatures = 5)
+
+VizDimLoadings(MHM, dims = 1:2, nfeatures = 50, balanced = TRUE, reduction = "pca")
+
+DimPlot(MHM, reduction = "pca") + NoLegend()
+
+DimHeatmap(MHM, dims = 1, cells = 500, balanced = TRUE)
+
+DimHeatmap(MHM, dims = 1:15, cells = 500, balanced = TRUE)
+
+# To observe an ‘elbow’ around PC, suggesting that the majority of true signal is captured in the which PCs; 
+
+ElbowPlot(MHM)
+
+#Cluster the cells
+
+MHM <- FindNeighbors(MHM, dims = 1:10)
+
+MHM <- FindClusters(MHM, resolution = 0.5)
+
+# Look at cluster IDs of the first 5 cells
+
+head(Idents(MHM), 5)
+
+# Run Non-Linear Dimention reduction UMAP/t-SNE
+
+MHM <- RunUMAP(MHM, dims = 1:10)
+
+DimPlot(MHM, reduction = "umap")
+DimPlot(MHM, reduction = "umap", split.by = "orig.ident")
+
+# to save
+saveRDS(MHM, file = "../MHM.rds")
+
+new.cluster.ids <- c("0", "1", "2", "3", "4", "5", "6", "7","8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19")
+names(new.cluster.ids) <- levels(MHM)
+MHM <- RenameIdents(MHM, new.cluster.ids)
+DimPlot(MHM, reduction = "umap", split.by = "orig.ident", label = TRUE, pt.size = 0.5) + NoLegend()
+
+saveRDS(MHM, file = "../MHM_clusters.rds")
+
+# find markers for every cluster compared to all remaining cells, report only the positive ones
+
+MHM.markers <- FindAllMarkers(MHM, only.pos = TRUE)
+MHM.markers %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1)
+MHM.markers
+
+# find all markers of cluster 2
+
+cluster2.markers <- FindMarkers(MHM, ident.1 = 2)
+head(cluster2.markers, n = 5)
 
 
-# 5. Scaling -------------
-all.genes <- rownames(nsclc.seurat.obj)
-nsclc.seurat.obj <- ScaleData(nsclc.seurat.obj, features = all.genes)
+cluster5.markers <- FindMarkers(MHM, ident.1 = 5, ident.2 = c(0, 3))
+head(cluster5.markers, n = 5)
 
-str(nsclc.seurat.obj)
-
-# 6. Perform Linear dimensionality reduction --------------
-nsclc.seurat.obj <- RunPCA(nsclc.seurat.obj, features = VariableFeatures(object = nsclc.seurat.obj))
-
-# visualize PCA results
-print(nsclc.seurat.obj[["pca"]], dims = 1:5, nfeatures = 5)
-DimHeatmap(nsclc.seurat.obj, dims = 1, cells = 500, balanced = TRUE)
-
-
-# determine dimensionality of the data
-ElbowPlot(nsclc.seurat.obj)
-
-
-# 7. Clustering ------------
-nsclc.seurat.obj <- FindNeighbors(nsclc.seurat.obj, dims = 1:15)
-
-# understanding resolution
-nsclc.seurat.obj <- FindClusters(nsclc.seurat.obj, resolution = c(0.1,0.3, 0.5, 0.7, 1))
-View(nsclc.seurat.obj@meta.data)
-
-DimPlot(nsclc.seurat.obj, group.by = "RNA_snn_res.0.5", label = TRUE)
-
-# setting identity of clusters
-Idents(nsclc.seurat.obj)
-Idents(nsclc.seurat.obj) <- "RNA_snn_res.0.1"
-Idents(nsclc.seurat.obj)
-
-# non-linear dimensionality reduction --------------
-# If you haven't installed UMAP, you can do so via reticulate::py_install(packages =
-# 'umap-learn')
-nsclc.seurat.obj <- RunUMAP(nsclc.seurat.obj, dims = 1:15)
-# note that you can set `label = TRUE` or use the LabelClusters function to help label
-# individual clusters
-DimPlot(nsclc.seurat.obj, reduction = "umap")
+# find markers for every cluster compared to all remaining cells, report only the positive
+# ones
+MHM.markers <- FindAllMarkers(MHM, only.pos = TRUE)
+MHM.markers %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1)
+MHM.markers
+cluster0.markers <- FindMarkers(MHM, ident.1 = 0, logfc.threshold = 0.25, test.use = "roc", only.pos = TRUE)
+cluster0.markers
+VlnPlot(MHM, features = c("Ttn", "Ryr2"))
+FeaturePlot(MHM, features = c("Ttn", "Ryr2"))
+MHM.markers %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1) %>%
+  slice_head(n = 10) %>%
+  ungroup() -> top10
+DoHeatmap(MHM, features = top10$gene) + NoLegend()
 
