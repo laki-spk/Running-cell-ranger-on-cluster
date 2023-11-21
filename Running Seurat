@@ -136,6 +136,9 @@ saveRDS(MHM, file = "../MHM_clusters.rds")
 
 # find markers for every cluster compared to all remaining cells, report only the positive ones
 
+install.packages('BiocManager')
+BiocManager::install('limma')
+
 MHM.markers <- FindAllMarkers(MHM, only.pos = TRUE)
 MHM.markers %>%
   group_by(cluster) %>%
@@ -151,16 +154,15 @@ head(cluster2.markers, n = 5)
 cluster5.markers <- FindMarkers(MHM, ident.1 = 5, ident.2 = c(0, 3))
 head(cluster5.markers, n = 5)
 
-# find markers for every cluster compared to all remaining cells, report only the positive
-# ones
-MHM.markers <- FindAllMarkers(MHM, only.pos = TRUE)
-MHM.markers %>%
-  group_by(cluster) %>%
-  dplyr::filter(avg_log2FC > 1)
-MHM.markers
 cluster0.markers <- FindMarkers(MHM, ident.1 = 0, logfc.threshold = 0.25, test.use = "roc", only.pos = TRUE)
 cluster0.markers
-VlnPlot(MHM, features = c("Ttn", "Ryr2"))
+
+VlnPlot(MHM, features = c("Myh6", "Cdh5", "Pdgfra", "Msln", "Myh11", "Kcnj8", "Adgre1", "Itgal", "Naaa", "S100a9", "Cd3g", "Ms4a1", "Plp1" ) , stack = TRUE, flip = TRUE)
+
+
+
+
+
 FeaturePlot(MHM, features = c("Ttn", "Ryr2"))
 MHM.markers %>%
   group_by(cluster) %>%
