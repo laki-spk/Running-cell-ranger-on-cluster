@@ -159,6 +159,9 @@ cluster0.markers
 
 VlnPlot(MHM, features = c("Myh6", "Cdh5", "Pdgfra", "Msln", "Myh11", "Kcnj8", "Adgre1", "Itgal", "Naaa", "S100a9", "Cd3g", "Ms4a1", "Plp1" ) , stack = TRUE, flip = TRUE)
 
+saveRDS(MHM, file = "../MHMFeature.rds")
+
+MHM <- AverageExpression(MHM)
 
 
 
