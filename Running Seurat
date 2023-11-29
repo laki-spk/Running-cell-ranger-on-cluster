@@ -1,6 +1,8 @@
 library(dplyr)
 library(Seurat)
 library(patchwork)
+install.packages('BiocManager')
+BiocManager::install('limma')
 
 # Load the dataset MHM - MH merged with Ctrl and treatment
 MHM.data <- Read10X(data.dir = "filtered_feature_bc_matrix/MHM/")
@@ -174,3 +176,4 @@ MHM.markers %>%
   ungroup() -> top10
 DoHeatmap(MHM, features = top10$gene) + NoLegend()
 
+VlnPlot(MHM_clustersall, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0)
