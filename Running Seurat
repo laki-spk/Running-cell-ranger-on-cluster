@@ -165,7 +165,9 @@ saveRDS(MHM, file = "../MHMFeature.rds")
 
 MHM <- AverageExpression(MHM)
 
+write.csv(MHM.markers, file = "Location\ MHM.csv")
 
+MHM markers <- table(MHM.markers@metadata$Cluster_ID, MHM.markers@metadata$orig.idnt)
 
 
 FeaturePlot(MHM, features = c("Ttn", "Ryr2"))
