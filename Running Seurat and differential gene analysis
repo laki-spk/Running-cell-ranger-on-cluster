@@ -163,14 +163,14 @@ VlnPlot(MHM, features = c("Myh6", "Cdh5", "Pdgfra", "Msln", "Myh11", "Kcnj8", "A
 
 saveRDS(MHM, file = "../MHMFeature.rds")
 
-MHM <- AverageExpression(MHM)
-
 write.csv(MHM.markers, file = "Location\ MHM.csv")
 
 MHM markers <- table(MHM.markers@metadata$Cluster_ID, MHM.markers@metadata$orig.idnt)
 
-
 FeaturePlot(MHM, features = c("Ttn", "Ryr2"))
+
+# TO SHOW TOP 10 GENES OF EACH CLUSTER
+
 MHM.markers %>%
   group_by(cluster) %>%
   dplyr::filter(avg_log2FC > 1) %>%
@@ -178,4 +178,28 @@ MHM.markers %>%
   ungroup() -> top10
 DoHeatmap(MHM, features = top10$gene) + NoLegend()
 
+# TO ANALYZE PRESENCE OF RNA OR DROPLETS;
+
 VlnPlot(MHM_clustersall, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0)
+
+# TO REMOVE SOME CLUSTERS FROM THE DOTMAP;
+
+sub_MHM <- subset(MHM, idents = 16, invert = TRUE)
+#or
+sub_MHM <- subset(MHM, idents = c(16,17), invert = TRUE)
+#or
+sub_MHM <- subset(MHM, idents = c("CM1", "FB1") , invert = TRUE)
+
+#THEN RENAME THEM;
+new.cluster.ids <- c("CM1", "FB1", "CM2", "FB2", "EC1", "FB3", "EC2", "Pericytes","Macro1", "CM3", "EC3", "EC4", "SMC", "FB4", "Macro4", "CM4")
+names(new.cluster.ids) <- levels(sub_MHM)
+sub_MHM <- RenameIdents(sub_MHM , new.cluster.ids)
+
+#to differentiate by control or treatment /  to split clustering with "orig.ident" at the end; EX CM1_1 do the following; (This helps to perform differnctial gene analysis)
+sub_MHM$celltype <- paste(sub_MHM@active.ident , sub_MHM$orig.ident,  sep = "_")
+Idents(sub_MHM) <- "celltype"
+
+#DIFFERENTIAL GENE ANALYSIS (MOST OF THE TIME WE USE TREATMENT VS CONTROL)
+CM1 <- FindMarkers(sub_MHM, ident.1 = "CM1_2", ident.2 = "CM1_1", verbose = FALSE, logfc.threshold = 0.25)
+
+#(This logfc. threshhold could be change according to the need. We ended up using 0.5 for this specific experiment)
